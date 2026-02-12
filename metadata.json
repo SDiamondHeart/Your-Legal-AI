@@ -1,0 +1,9 @@
+{
+  "name": "Your Legal AI",
+  "description": "A friendly and accessible legal explainer for Nigerian citizens, helping simplify complex legal concepts into everyday language.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone",
+    "camera"
+  ]
+}
