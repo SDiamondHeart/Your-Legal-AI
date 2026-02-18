@@ -1,15 +1,17 @@
 
 import React from 'react';
-import { ScaleIcon, HomeIcon, SettingsIcon, PlusIcon, HistoryIcon } from './Icons';
+import { ScaleIcon, HomeIcon, SettingsIcon, PlusIcon, HistoryIcon, DownloadIcon } from './Icons';
 import { AppView } from '../types';
 
 interface HeaderProps {
   currentView: AppView;
   onChangeView: (view: AppView) => void;
   onNewChat: () => void;
+  installPrompt: any;
+  onInstall: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ currentView, onChangeView, onNewChat }) => {
+const Header: React.FC<HeaderProps> = ({ currentView, onChangeView, onNewChat, installPrompt, onInstall }) => {
   return (
     <header className="sticky top-0 z-50 bg-white dark:bg-legal-black border-b border-legal-brown/20 dark:border-gray-800 shadow-sm transition-colors duration-200">
       <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -28,6 +30,18 @@ const Header: React.FC<HeaderProps> = ({ currentView, onChangeView, onNewChat })
         
         {/* Navigation */}
         <div className="flex items-center gap-1 sm:gap-2">
+           {/* Install Button (Only visible if prompt available) */}
+           {installPrompt && (
+            <button
+              onClick={onInstall}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-legal-brown/10 text-legal-brown hover:bg-legal-brown/20 dark:bg-legal-brown/20 dark:text-legal-paper dark:hover:bg-legal-brown/30 transition-colors font-medium text-sm mr-1"
+              title="Download App"
+            >
+              <DownloadIcon className="w-4 h-4" />
+              <span className="hidden xs:inline">App</span>
+            </button>
+          )}
+
            {/* New Chat Button */}
           <button
             onClick={onNewChat}

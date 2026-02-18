@@ -8,11 +8,12 @@ import ChatInput from './components/ChatInput';
 import LegalDisclaimer from './components/LegalDisclaimer';
 import AboutModal from './components/AboutModal';
 import History from './components/History';
-import { Message, Sender, AppView, ChatMode, Attachment, ChatSession } from './types';
-import { sendMessageStream, initializeChat, resetChat, resumeChatSession } from './services/geminiService';
+import AudioController from './components/AudioController';
+import { Message, Sender, AppView, ChatMode, Attachment, ChatSession, UserProfile } from './types';
+import { sendMessageStream, initializeChat, resetChat, resumeChatSession, stopSpeech } from './services/geminiService';
 import { INITIAL_GREETING, MODES } from './constants';
 import { WifiOffIcon, ChevronDownIcon } from './components/Icons';
-import { saveSession, generateTitle } from './utils/storage';
+import { saveSession, generateTitle, getProfile, saveProfile } from './utils/storage';
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>('hero');
@@ -25,7 +26,13 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isAudioActive, setIsAudioActive] = useState(false);
   
+  const [userProfile, setUserProfile] = useState<UserProfile>(() => getProfile());
+  
+  // PWA Install Prompt State
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+
   // Initialize dark mode from system preference
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined' && window.matchMedia) {
@@ -33,6 +40,17 @@ const App: React.FC = () => {
     }
     return false;
   });
+
+  // Listen for System Theme Changes
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (e: MediaQueryListEvent) => {
+      setIsDarkMode(e.matches);
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -40,37 +58,56 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
+    
+    // PWA Install Prompt Handler
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setInstallPrompt(null);
+      console.log('App successfully installed');
+    };
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
-  // Listen for system theme changes
+  // Listen for audio events
   useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = (e: MediaQueryListEvent) => setIsDarkMode(e.matches);
-
-    // Modern browsers
-    if (mediaQuery.addEventListener) {
-      mediaQuery.addEventListener('change', handleChange);
-    } else {
-      // Fallback
-      mediaQuery.addListener(handleChange);
-    }
-
-    return () => {
-      if (mediaQuery.removeEventListener) {
-        mediaQuery.removeEventListener('change', handleChange);
-      } else {
-        mediaQuery.removeListener(handleChange);
-      }
+    const checkAudio = () => {
+      const isSpeaking = !!(window as any).currentTtsSource || window.speechSynthesis.speaking;
+      setIsAudioActive(isSpeaking);
     };
+    const interval = setInterval(checkAudio, 500);
+    return () => clearInterval(interval);
   }, []);
+
+  const handleUpdateProfile = (newProfile: UserProfile) => {
+    setUserProfile(newProfile);
+    saveProfile(newProfile);
+  };
+
+  const handleInstallClick = () => {
+    if (installPrompt) {
+      installPrompt.prompt();
+      installPrompt.userChoice.then((choiceResult: any) => {
+        if (choiceResult.outcome === 'accepted') {
+          setInstallPrompt(null);
+        }
+      });
+    }
+  };
 
   useEffect(() => {
     if (isDarkMode) document.documentElement.classList.add('dark');
@@ -129,7 +166,7 @@ const App: React.FC = () => {
         timestamp: new Date(),
       },
     ]);
-    initializeChat(mode);
+    initializeChat(mode, userProfile);
     setView('chat');
   };
 
@@ -137,7 +174,7 @@ const App: React.FC = () => {
     setSessionId(session.id);
     setMessages(session.messages);
     setChatMode(session.mode);
-    resumeChatSession(session.messages, session.mode);
+    resumeChatSession(session.messages, session.mode, userProfile);
     setView('chat');
   };
 
@@ -188,7 +225,7 @@ const App: React.FC = () => {
     setIsLoading(true);
 
     try {
-      await sendMessageStream(text, attachments, chatMode, (streamedText, groundingMetadata) => {
+      await sendMessageStream(text, attachments, chatMode, userProfile, (streamedText, groundingMetadata) => {
         setMessages((prev) => 
           prev.map((msg) => 
             msg.id === botMsgId 
@@ -223,6 +260,8 @@ const App: React.FC = () => {
         currentView={view} 
         onChangeView={setView} 
         onNewChat={() => startNewChat('standard')}
+        installPrompt={installPrompt}
+        onInstall={handleInstallClick}
       />
       
       {!isOnline && (
@@ -235,7 +274,11 @@ const App: React.FC = () => {
       <main className="flex-1 overflow-y-auto scrollbar-hide relative">
         
         {view === 'hero' && (
-          <Hero onStartChat={startNewChat} />
+          <Hero 
+            onStartChat={startNewChat} 
+            onInstall={handleInstallClick}
+            showInstallButton={!!installPrompt}
+          />
         )}
 
         {view === 'settings' && (
@@ -244,6 +287,10 @@ const App: React.FC = () => {
             toggleTheme={toggleTheme}
             onClearHistory={handleClearHistory}
             onOpenAbout={() => setIsAboutOpen(true)}
+            installPrompt={installPrompt}
+            onInstall={handleInstallClick}
+            userProfile={userProfile}
+            onUpdateProfile={handleUpdateProfile}
           />
         )}
 
@@ -252,7 +299,7 @@ const App: React.FC = () => {
         )}
 
         {view === 'chat' && (
-          <div className="flex flex-col h-full">
+          <div className="flex flex-col h-full relative">
             <div className="sticky top-0 z-30 bg-legal-paper/95 dark:bg-legal-black/95 backdrop-blur-sm border-b border-legal-brown/20 dark:border-gray-800 px-4 py-2 flex justify-center">
               <div className="relative" ref={dropdownRef}>
                 <button 
@@ -311,6 +358,8 @@ const App: React.FC = () => {
               )}
               <div ref={messagesEndRef} />
             </div>
+
+            <AudioController isActive={isAudioActive} onClose={() => setIsAudioActive(false)} />
 
             <div className="sticky bottom-0 z-40 bg-gradient-to-t from-legal-paper via-legal-paper dark:from-legal-black dark:via-legal-black to-transparent pt-2">
                <ChatInput onSend={handleSendMessage} isLoading={isLoading} />

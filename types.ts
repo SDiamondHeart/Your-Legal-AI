@@ -26,6 +26,12 @@ export type ChatMode = 'standard' | 'deep_think' | 'research' | 'guided_learning
 
 export type AppView = 'hero' | 'chat' | 'settings' | 'history';
 
+export interface UserProfile {
+  language: 'English' | 'Pidgin' | 'Igbo' | 'Yoruba' | 'Hausa';
+  location: string;
+  dialect: 'UK' | 'US';
+}
+
 export interface ChatState {
   messages: Message[];
   isLoading: boolean;

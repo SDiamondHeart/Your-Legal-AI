@@ -44,9 +44,6 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSend, isLoading }) => {
   const handleLocationClick = () => {
     if (isLoading || isLocating) return;
     
-    const confirmed = window.confirm("Do you allow Your Legal AI to access your location to find nearby lawyers?");
-    if (!confirmed) return;
-    
     if (!navigator.geolocation) {
       alert("Geolocation is not supported by your browser.");
       return;
@@ -56,28 +53,20 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSend, isLoading }) => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
-        const locationMsg = `I am currently at Lat: ${latitude}, Long: ${longitude}. Please find a lawyer or legal aid near me.`;
+        const locationMsg = `I am currently at Lat: ${latitude}, Long: ${longitude}. Please find relevant legal information for this area.`;
         onSend(locationMsg, []);
         setIsLocating(false);
       },
       (error) => {
-        console.error("Error getting location", error);
-        alert("Unable to retrieve your location. Please type your city manually.");
+        alert("Unable to retrieve your location.");
         setIsLocating(false);
       }
     );
   };
 
-  // File Handling
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-
-    const confirmed = window.confirm("You are about to upload a file. Do you consent to Your Legal AI analyzing this document/photo?");
-    if (!confirmed) {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      return;
-    }
 
     const newAttachments: Attachment[] = [];
     for (let i = 0; i < files.length; i++) {
@@ -102,84 +91,6 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSend, isLoading }) => {
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Audio Note Recording
-  const startRecording = async () => {
-    try {
-      const confirmed = window.confirm("Your Legal AI wants to record audio. Do you consent?");
-      if (!confirmed) return;
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/mp3' }); 
-        const base64 = await blobToBase64(audioBlob);
-        setAttachments(prev => [...prev, {
-          type: 'audio',
-          mimeType: 'audio/mp3',
-          data: base64,
-          name: 'Voice Note'
-        }]);
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (err) {
-      console.error("Error accessing microphone", err);
-      alert("Could not access microphone.");
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
-
-  // Speech to Text (Dictation)
-  const toggleDictation = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    
-    if (!SpeechRecognition) {
-      alert("Speech to text is not supported in this browser.");
-      return;
-    }
-
-    if (isDictating) {
-      recognitionRef.current?.stop();
-      setIsDictating(false);
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = 'en-NG'; // Prioritize Nigerian English
-
-    recognition.onstart = () => setIsDictating(true);
-    recognition.onend = () => setIsDictating(false);
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error", event.error);
-      setIsDictating(false);
-    };
-    
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setText(prev => prev + (prev ? ' ' : '') + transcript);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-  };
-
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -188,19 +99,15 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSend, isLoading }) => {
   }, [text]);
 
   return (
-    <div className="w-full max-w-3xl mx-auto px-4 pb-4 pt-2">
-      
-      {/* Attachments Preview */}
+    <div className="w-full max-w-3xl mx-auto px-4 pb-6 pt-2">
       {attachments.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto mb-2 pb-2">
+        <div className="flex gap-2 overflow-x-auto mb-2 pb-2 scrollbar-hide">
           {attachments.map((att, idx) => (
-            <div key={idx} className="relative shrink-0 w-20 h-20 bg-legal-paper dark:bg-gray-800 rounded-lg border border-legal-brown/20 dark:border-gray-700 overflow-hidden flex items-center justify-center">
+            <div key={idx} className="relative shrink-0 w-20 h-20 bg-white dark:bg-legal-black rounded-lg border border-gray-200 dark:border-white overflow-hidden flex items-center justify-center">
               {att.type === 'image' ? (
                 <img src={`data:${att.mimeType};base64,${att.data}`} alt="Preview" className="w-full h-full object-cover" />
-              ) : att.type === 'audio' ? (
-                <MicIcon className="w-8 h-8 text-gray-400" />
               ) : (
-                <PaperclipIcon className="w-8 h-8 text-gray-400" />
+                <PaperclipIcon className="w-8 h-8 text-gray-400 dark:text-white" />
               )}
               <button 
                 onClick={() => removeAttachment(idx)}
@@ -215,95 +122,50 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSend, isLoading }) => {
 
       <form 
         onSubmit={handleSubmit}
-        className="relative flex items-end gap-2 bg-white dark:bg-gray-800 rounded-2xl border border-legal-brown/20 dark:border-gray-700 shadow-lg focus-within:ring-2 focus-within:ring-legal-green dark:focus-within:ring-legal-green focus-within:border-transparent transition-all p-2"
+        className="relative flex items-end gap-2 bg-white dark:bg-legal-black rounded-2xl border border-gray-200 dark:border-white shadow-xl focus-within:ring-2 focus-within:ring-legal-green transition-all p-2"
       >
-        {/* Hidden File Input */}
         <input 
           type="file" 
           multiple 
           ref={fileInputRef}
           className="hidden"
           onChange={handleFileSelect}
-          accept="image/*,application/pdf,.doc,.docx,audio/*"
+          accept="image/*,application/pdf"
         />
 
-        {/* File Attachment Button */}
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading}
-          className="p-2.5 rounded-xl flex items-center justify-center transition-all duration-200 shrink-0 bg-legal-paper dark:bg-gray-700 text-legal-brown dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
-          title="Attach File (Photo, Doc)"
+          className="p-2.5 rounded-xl flex items-center justify-center transition-all shrink-0 bg-gray-50 dark:bg-legal-green/20 text-legal-green dark:text-white hover:bg-gray-100"
         >
           <PaperclipIcon className="w-5 h-5" />
         </button>
 
-        {/* Location Button */}
         <button
           type="button"
           onClick={handleLocationClick}
           disabled={isLoading || isLocating}
-          className={`
-            p-2.5 rounded-xl flex items-center justify-center transition-all duration-200 shrink-0
-            ${isLocating 
-              ? 'bg-legal-paper dark:bg-gray-700 text-legal-green animate-pulse' 
-              : 'bg-legal-paper dark:bg-gray-700 text-legal-brown dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'}
-          `}
-          title="Share Location"
+          className={`p-2.5 rounded-xl flex items-center justify-center transition-all shrink-0 ${isLocating ? 'bg-legal-green text-white animate-pulse' : 'bg-gray-50 dark:bg-legal-green/20 text-legal-green dark:text-white'}`}
         >
           <MapPinIcon className="w-5 h-5" />
         </button>
 
-        {/* Hold to Record Audio */}
-        <button
-          type="button"
-          onMouseDown={startRecording}
-          onMouseUp={stopRecording}
-          onTouchStart={startRecording}
-          onTouchEnd={stopRecording}
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask your legal question..."
+          className="w-full bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/50 text-base p-2 resize-none focus:outline-none max-h-[150px] overflow-y-auto scrollbar-hide"
+          rows={1}
           disabled={isLoading}
-          className={`
-            p-2.5 rounded-xl flex items-center justify-center transition-all duration-200 shrink-0
-            ${isRecording 
-              ? 'bg-red-500 text-white animate-pulse' 
-              : 'bg-legal-paper dark:bg-gray-700 text-legal-brown dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'}
-          `}
-          title="Hold to Record Audio Note"
-        >
-          <MicIcon className="w-5 h-5" />
-        </button>
-
-        <div className="relative w-full">
-            <textarea
-              ref={textareaRef}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={isRecording ? "Recording..." : isDictating ? "Listening..." : "Type here..."}
-              className="w-full bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-base p-2 pr-8 resize-none focus:outline-none max-h-[150px] overflow-y-auto scrollbar-hide"
-              rows={1}
-              disabled={isLoading}
-            />
-             {/* Tap to Dictate (inside text area) */}
-             <button
-              type="button"
-              onClick={toggleDictation}
-              className={`absolute right-1 top-2 p-1 rounded-full ${isDictating ? 'text-red-500 animate-pulse' : 'text-gray-400 hover:text-legal-green'}`}
-              title="Tap to speak (Speech to text)"
-             >
-               <MicIcon className="w-4 h-4" />
-             </button>
-        </div>
+        />
 
         <button
           type="submit"
           disabled={(!text.trim() && attachments.length === 0) || isLoading}
-          className={`
-            p-2.5 rounded-xl flex items-center justify-center transition-all duration-200 shrink-0
-            ${(text.trim() || attachments.length > 0) && !isLoading 
-              ? 'bg-legal-green text-white hover:bg-legal-black shadow-md' 
-              : 'bg-legal-paper dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'}
-          `}
+          className={`p-2.5 rounded-xl flex items-center justify-center transition-all shrink-0 ${ (text.trim() || attachments.length > 0) && !isLoading ? 'bg-legal-green text-white dark:bg-white dark:text-legal-black shadow-lg' : 'bg-gray-100 dark:bg-white/10 text-gray-400 dark:text-white/20' }`}
         >
           <SendIcon className="w-5 h-5" />
         </button>

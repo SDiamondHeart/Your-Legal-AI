@@ -1,7 +1,22 @@
 
-import { ChatSession, Message, Sender } from '../types';
+import { ChatSession, Message, Sender, UserProfile } from '../types';
 
 const STORAGE_KEY = 'lawbuddy_ng_chats';
+const PROFILE_KEY = 'lawbuddy_ng_profile';
+
+export const getProfile = (): UserProfile => {
+  const data = localStorage.getItem(PROFILE_KEY);
+  if (!data) return { language: 'English', location: 'Lagos', dialect: 'UK' };
+  try {
+    return JSON.parse(data);
+  } catch {
+    return { language: 'English', location: 'Lagos', dialect: 'UK' };
+  }
+};
+
+export const saveProfile = (profile: UserProfile) => {
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+};
 
 export const getSessions = (): ChatSession[] => {
   try {
@@ -34,14 +49,14 @@ export const saveSession = (session: ChatSession) => {
       sessions.unshift(session);
     }
     
-    // Basic Quota management: Limit to 20 chats to prevent LocalStorage overflow
+    // Basic Quota management: Limit to 20 chats
     if (sessions.length > 20) {
         sessions.pop(); 
     }
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
   } catch (error) {
-    console.error("Error saving session (likely quota exceeded)", error);
+    console.error("Error saving session", error);
   }
 };
 
